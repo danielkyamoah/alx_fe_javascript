@@ -1,71 +1,346 @@
-// Step 1: Manage an array of quote objects
-const quotes = [
+
+const DEFAULT_QUOTES = [
   { text: "The only way to do great work is to love what you do.", category: "Motivation" },
   { text: "Life is what happens when you’re busy making other plans.", category: "Life" },
   { text: "In the middle of every difficulty lies opportunity.", category: "Wisdom" },
   { text: "Simplicity is the ultimate sophistication.", category: "Design" },
 ];
 
-// Step 2: Function to show a random quote
+const LS_KEY = "dqg_quotes_v1";          // localStorage key for persistent quotes
+const SESSION_LAST_VIEWED = "dqg_last";  // sessionStorage key for last viewed quote index
+
+// In-memory quotes array (will be loaded from localStorage if present)
+let quotes = [];
+
+// -----------------------------
+// Utility: Save / Load to localStorage
+// -----------------------------
+function saveQuotes() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(quotes));
+  } catch (err) {
+    console.error("Failed to save quotes to localStorage:", err);
+    alert("Unable to save quotes — localStorage error.");
+  }
+}
+
+function loadQuotes() {
+  const raw = localStorage.getItem(LS_KEY);
+  if (!raw) {
+    quotes = [...DEFAULT_QUOTES];
+    saveQuotes(); // save the defaults so localStorage becomes initialized
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    // Basic validation: parsed should be an array of objects with text and category
+    if (Array.isArray(parsed) && parsed.every(q => q && typeof q.text === "string")) {
+      quotes = parsed;
+    } else {
+      console.warn("Invalid data in localStorage, resetting to defaults.");
+      quotes = [...DEFAULT_QUOTES];
+      saveQuotes();
+    }
+  } catch (err) {
+    console.error("Error parsing saved quotes JSON:", err);
+    quotes = [...DEFAULT_QUOTES];
+    saveQuotes();
+  }
+}
+
+// -----------------------------
+// Show a random quote and store last viewed in sessionStorage
+// -----------------------------
 function showRandomQuote() {
   const quoteDisplay = document.getElementById("quoteDisplay");
-  const randomIndex = Math.floor(Math.random() * quotes.length);
+  if (!quotes.length) {
+    quoteDisplay.innerHTML = "<p>No quotes available.</p>";
+    return;
+  }
+
+  // Prefer to show the last viewed if session says so (makes "back to last" possible)
+  const lastIndexRaw = sessionStorage.getItem(SESSION_LAST_VIEWED);
+  let randomIndex;
+  if (lastIndexRaw !== null && Math.random() < 0.15) {
+    // 15% chance to show the session-stored last viewed to demonstrate sessionStorage use
+    const li = parseInt(lastIndexRaw, 10);
+    if (!Number.isNaN(li) && li >= 0 && li < quotes.length) randomIndex = li;
+  }
+  if (randomIndex === undefined) randomIndex = Math.floor(Math.random() * quotes.length);
+
   const { text, category } = quotes[randomIndex];
 
   quoteDisplay.innerHTML = `
-    <p>"${text}"</p>
-    <p><strong>Category:</strong> ${category}</p>
+    <blockquote style="font-style: italic; margin: 0 0 8px 0;">"${escapeHtml(text)}"</blockquote>
+    <div><strong>Category:</strong> ${escapeHtml(category || "Uncategorized")}</div>
+    <div style="margin-top:6px; font-size: 0.9em; color: #666;">
+      <small>Quote #${randomIndex + 1} of ${quotes.length}</small>
+    </div>
   `;
+
+  // store last viewed index in sessionStorage (temporary for this browser tab)
+  try {
+    sessionStorage.setItem(SESSION_LAST_VIEWED, String(randomIndex));
+  } catch (err) {
+    console.warn("sessionStorage not available:", err);
+  }
 }
 
-// Step 3: Function to create and handle the Add Quote Form
+// small helper to prevent accidental HTML injection when inserting user content
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// -----------------------------
+// Create dynamic Add-Quote form
+// -----------------------------
 function createAddQuoteForm() {
-  // Create form elements dynamically
+  // If the form already exists, do nothing
+  if (document.getElementById("addQuoteForm")) return;
+
   const form = document.createElement("form");
   form.id = "addQuoteForm";
+  form.style.marginTop = "12px";
+  form.style.display = "grid";
+  form.style.gridTemplateColumns = "1fr 1fr auto";
+  form.style.gap = "8px";
 
   const quoteInput = document.createElement("input");
   quoteInput.type = "text";
   quoteInput.placeholder = "Enter quote text";
   quoteInput.required = true;
+  quoteInput.id = "quoteTextInput";
 
   const categoryInput = document.createElement("input");
   categoryInput.type = "text";
-  categoryInput.placeholder = "Enter category";
+  categoryInput.placeholder = "Category (e.g., Motivational)";
   categoryInput.required = true;
+  categoryInput.id = "quoteCategoryInput";
 
   const submitBtn = document.createElement("button");
-  submitBtn.textContent = "Add Quote";
   submitBtn.type = "submit";
+  submitBtn.textContent = "Add Quote";
 
-  // Append inputs to form
   form.append(quoteInput, categoryInput, submitBtn);
-  document.body.appendChild(form);
+  // Insert the form after the "Show New Quote" button or at the end of body
+  const newQuoteBtn = document.getElementById("newQuote");
+  if (newQuoteBtn && newQuoteBtn.parentNode) {
+    newQuoteBtn.parentNode.insertBefore(form, newQuoteBtn.nextSibling);
+  } else {
+    document.body.appendChild(form);
+  }
 
-  // Handle form submission
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const newQuote = {
-      text: quoteInput.value.trim(),
-      category: categoryInput.value.trim()
-    };
 
-    // Validation
-    if (newQuote.text && newQuote.category) {
-      quotes.push(newQuote);
-      alert("Quote added successfully!");
-      form.reset();
-    } else {
-      alert("Please fill in both fields.");
+    const newText = quoteInput.value.trim();
+    const newCategory = categoryInput.value.trim() || "Uncategorized";
+
+    // Basic validation
+    if (!newText) {
+      alert("Please enter the quote text.");
+      return;
     }
+
+    const newQuote = { text: newText, category: newCategory };
+    quotes.push(newQuote);
+    saveQuotes();
+
+    // UX: show the newly added quote immediately
+    const newIndex = quotes.length - 1;
+    try {
+      sessionStorage.setItem(SESSION_LAST_VIEWED, String(newIndex));
+    } catch (err) { /* ignore */ }
+
+    showQuoteAtIndex(newIndex);
+    form.reset();
+    // small success feedback
+    flashMessage("Quote added and saved.", 2000);
   });
 }
 
-// Step 4: Set up event listeners
-document.getElementById("newQuote").addEventListener("click", showRandomQuote);
+// helper to show quote at specific index
+function showQuoteAtIndex(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= quotes.length) {
+    showRandomQuote();
+    return;
+  }
+  const quoteDisplay = document.getElementById("quoteDisplay");
+  const { text, category } = quotes[index];
+  quoteDisplay.innerHTML = `
+    <blockquote style="font-style: italic; margin: 0 0 8px 0;">"${escapeHtml(text)}"</blockquote>
+    <div><strong>Category:</strong> ${escapeHtml(category || "Uncategorized")}</div>
+    <div style="margin-top:6px; font-size: 0.9em; color: #666;">
+      <small>Quote #${index + 1} of ${quotes.length}</small>
+    </div>
+  `;
+  try { sessionStorage.setItem(SESSION_LAST_VIEWED, String(index)); } catch (e) {}
+}
 
-// Step 5: Initialize the app
-window.addEventListener("DOMContentLoaded", () => {
-  showRandomQuote();      // show one at start
-  createAddQuoteForm();   // generate the add form
-});
+// small temporary flash message in top-right corner
+function flashMessage(msg, ms = 1500) {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  el.style.position = "fixed";
+  el.style.right = "20px";
+  el.style.top = "20px";
+  el.style.padding = "8px 12px";
+  el.style.background = "#222";
+  el.style.color = "#fff";
+  el.style.borderRadius = "6px";
+  el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+  el.style.zIndex = 10000;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+
+// -----------------------------
+// Export quotes to JSON (download)
+// -----------------------------
+function exportQuotesToJson() {
+  try {
+    const data = JSON.stringify(quotes, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    a.download = `quotes_export_${timestamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    flashMessage("Export started", 1200);
+  } catch (err) {
+    console.error("Export error:", err);
+    alert("Failed to export quotes.");
+  }
+}
+
+// -----------------------------
+// Import JSON file handler
+// -----------------------------
+function importFromJsonFile(event) {
+  const input = event.target;
+  if (!input.files || !input.files[0]) {
+    alert("No file selected.");
+    return;
+  }
+
+  const file = input.files[0];
+
+  const reader = new FileReader();
+  reader.onload = function (ev) {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      if (!Array.isArray(parsed)) {
+        throw new Error("Imported JSON must be an array of quote objects.");
+      }
+
+      // Validate objects and normalize: convert items that have text property
+      const cleaned = parsed
+        .map(item => {
+          if (!item || typeof item.text !== "string") return null;
+          return { text: item.text.trim(), category: (item.category && typeof item.category === "string") ? item.category.trim() : "Uncategorized" };
+        })
+        .filter(Boolean); // remove nulls
+
+      if (!cleaned.length) {
+        alert("No valid quote objects found in file.");
+        return;
+      }
+
+      // Option: avoid duplicates — simple heuristic: text must not already exist
+      let addedCount = 0;
+      const existingTexts = new Set(quotes.map(q => q.text));
+      cleaned.forEach(q => {
+        if (!existingTexts.has(q.text)) {
+          quotes.push(q);
+          existingTexts.add(q.text);
+          addedCount++;
+        }
+      });
+
+      saveQuotes();
+      flashMessage(`${addedCount} quotes imported.`, 2200);
+      // reset the input so same file can be re-imported if needed
+      input.value = "";
+    } catch (err) {
+      console.error("Import error:", err);
+      alert("Invalid JSON file: " + (err && err.message ? err.message : "unknown error"));
+      input.value = "";
+    }
+  };
+
+  reader.onerror = function (err) {
+    console.error("FileReader error:", err);
+    alert("Failed to read file.");
+  };
+
+  reader.readAsText(file);
+}
+
+// -----------------------------
+// Clear saved quotes (localStorage) — destructive
+// -----------------------------
+function clearSavedQuotes() {
+  if (!confirm("Clear all saved quotes and reset to defaults? This cannot be undone.")) return;
+  try {
+    localStorage.removeItem(LS_KEY);
+    loadQuotes();
+    showRandomQuote();
+    flashMessage("Saved quotes cleared.", 1500);
+  } catch (err) {
+    console.error("Error clearing storage:", err);
+    alert("Failed to clear storage.");
+  }
+}
+
+// -----------------------------
+// Initialize event listeners & load data
+// -----------------------------
+function initializeApp() {
+  // load any saved quotes
+  loadQuotes();
+
+   // create add form (if not present)
+  createAddQuoteForm();
+
+  // button to show new random quote
+  const newQuoteBtn = document.getElementById("newQuote");
+  if (newQuoteBtn) newQuoteBtn.addEventListener("click", showRandomQuote);
+
+  // export button
+  const exportBtn = document.getElementById("exportQuotes");
+  if (exportBtn) exportBtn.addEventListener("click", exportQuotesToJson);
+
+  // import file input
+  const importInput = document.getElementById("importFile");
+  if (importInput) importInput.addEventListener("change", importFromJsonFile);
+
+  // clear storage button
+  const clearBtn = document.getElementById("clearStorage");
+  if (clearBtn) clearBtn.addEventListener("click", clearSavedQuotes);
+
+  // show something on start
+  // If sessionStorage has a last viewed index, try to show it; else random.
+  const lastIndexRaw = sessionStorage.getItem(SESSION_LAST_VIEWED);
+  if (lastIndexRaw !== null) {
+    const idx = parseInt(lastIndexRaw, 10);
+    if (!Number.isNaN(idx) && idx >= 0 && idx < quotes.length) {
+      showQuoteAtIndex(idx);
+      return;
+    }
+  }
+  showRandomQuote();
+}
+
+// Auto-run when DOM ready
+window.addEventListener("DOMContentLoaded", initializeApp);
