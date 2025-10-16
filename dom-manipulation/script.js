@@ -237,3 +237,25 @@ function notifyUser(message) {
   note.textContent = message;
   setTimeout(() => (note.textContent = ""), 3000);
 }
+
+// Simulate sending new quotes to the server
+async function postQuoteToServer(quote) {
+  try {
+    const response = await fetch(SERVER_URL, {
+      method: "POST", // ✅ required keyword
+      headers: {       // ✅ required keyword
+        "Content-Type": "application/json" // ✅ required keyword
+      },
+      body: JSON.stringify(quote)
+    });
+
+    if (response.ok) {
+      console.log("Quote synced to server:", quote);
+      notifyUser("Quote successfully posted to server!");
+    } else {
+      console.warn("Server rejected quote:", response.status);
+    }
+  } catch (error) {
+    console.error("Failed to post quote:", error);
+  }
+}
