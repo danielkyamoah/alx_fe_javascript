@@ -84,7 +84,7 @@ function filterQuotes() {
   const selectedCategory = document.getElementById("categoryFilter").value;
   // ✅ Save selected category to localStorage
   localStorage.setItem(LAST_FILTER_KEY, selectedCategory);
-  
+
   if (selectedCategory === "all") {
     showRandomQuote(quotes);
   } else {
@@ -105,7 +105,7 @@ function createAddQuoteForm() {
   `;
   document.body.appendChild(form);
 
-  form.addEventListener("submit", e => {
+  form.addEventListener("submit", async e => {
     e.preventDefault();
     const text = document.getElementById("quoteText").value.trim();
     const category = document.getElementById("quoteCategory").value.trim();
@@ -114,11 +114,33 @@ function createAddQuoteForm() {
       return;
     }
 
-    quotes.push({ text, category });
-    saveQuotes();
-    populateCategories(); // ✅ refresh categories if new one added
-    form.reset();
-    showRandomQuote();
+    const newQuote = { text, category };
+
+    try {
+      // Post to mock API
+      const response = await fetch(SERVER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newQuote)
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // If server post successful, update local storage
+      quotes.push(newQuote);
+      saveQuotes();
+      populateCategories(); // ✅ refresh categories if new one added
+      form.reset();
+      showRandomQuote();
+      notifyUser("Quote added successfully!");
+    } catch (error) {
+      console.error('Error posting quote:', error);
+      notifyUser("Failed to add quote to server. Please try again.");
+    }
   });
 }
 
