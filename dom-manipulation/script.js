@@ -225,7 +225,7 @@ async function syncQuotes() {
       quotes = mergedQuotes;
       saveQuotes();
       populateCategories();
-      notifyUser("Quotes synced successfully!");
+      notifyUser("Quotes synced with server!");
     }
 
     return true;
@@ -384,7 +384,7 @@ function handleServerSync(serverQuotes) {
   populateCategories();
   filterQuotes();
 
-  notifyUser("Quotes synced with server.");
+  notifyUser("Quotes synced with server!");
 }
 
 
