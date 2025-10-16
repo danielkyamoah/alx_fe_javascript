@@ -187,3 +187,53 @@ document.addEventListener("DOMContentLoaded", () => {
     showRandomQuote();
   }
 });
+
+
+const SERVER_URL = "https://jsonplaceholder.typicode.com/posts"; // mock endpoint
+
+// Simulate fetching from "server"
+async function fetchServerQuotes() {
+  try {
+    const res = await fetch(SERVER_URL);
+    const data = await res.json();
+
+    // Convert fake posts to your quote format
+    const serverQuotes = data.slice(0, 5).map(post => ({
+      text: post.title,
+      category: "Server"
+    }));
+
+    handleServerSync(serverQuotes);
+  } catch (err) {
+    console.error("Server fetch failed:", err);
+  }
+}
+
+
+function handleServerSync(serverQuotes) {
+  const localQuotes = JSON.parse(localStorage.getItem("quotes")) || [];
+
+  // Basic merge (server takes precedence)
+  const mergedQuotes = [...serverQuotes];
+
+  localQuotes.forEach(local => {
+    const exists = serverQuotes.some(sq => sq.text === local.text);
+    if (!exists) mergedQuotes.push(local);
+  });
+
+  // Save merged result locally
+  localStorage.setItem("quotes", JSON.stringify(mergedQuotes));
+  quotes = mergedQuotes;
+
+  populateCategories();
+  filterQuotes();
+
+  notifyUser("Quotes synced with server.");
+}
+
+
+function notifyUser(message) {
+  const note = document.getElementById("notification");
+  note.textContent = message;
+  setTimeout(() => (note.textContent = ""), 3000);
+}
