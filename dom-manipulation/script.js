@@ -3,6 +3,7 @@
 const LOCAL_STORAGE_KEY = "quotes_v1";
 const LAST_FILTER_KEY = "lastSelectedCategory";
 const SESSION_LAST_VIEWED = "lastViewedQuote";
+let selectedCategory = "all";
 
 const defaultQuotes = [
   { text: "The only way to do great work is to love what you do.", category: "Motivation" },
@@ -80,16 +81,18 @@ function populateCategories() {
 
 /* === Filter Quotes by Category === */
 function filterQuotes() {
-  const selected = document.getElementById("categoryFilter").value;
+  const selectedCategory = document.getElementById("categoryFilter").value;
   // ✅ Save selected category to localStorage
-  localStorage.setItem(LAST_FILTER_KEY, selected);
-  if (selected === "all") {
+  localStorage.setItem(LAST_FILTER_KEY, selectedCategory);
+  
+  if (selectedCategory === "all") {
     showRandomQuote(quotes);
   } else {
-    const filtered = quotes.filter(q => q.category === selected);
+    const filtered = quotes.filter(q => q.category === selectedCategory);
     showRandomQuote(filtered);
   }
 }
+
 
 /* === Add New Quote Form === */
 function createAddQuoteForm() {
