@@ -188,12 +188,146 @@ function importQuotes(event) {
   reader.readAsText(file);
 }
 
+/* === Server Sync === */
+async function syncQuotes() {
+  try {
+    const localQuotes = quotes;
+    const response = await fetch(SERVER_URL);
+    if (!response.ok) throw new Error('Network response was not ok');
+    const serverQuotes = await response.json();
+
+    // Convert server data to our format
+    const formattedServerQuotes = serverQuotes.slice(0, 5).map(post => ({
+      text: post.title,
+      category: "Server",
+      serverId: post.id
+    }));
+
+    // Find conflicts (quotes that exist in both local and server with differences)
+    const conflicts = [];
+    const mergedQuotes = [...formattedServerQuotes];
+
+    localQuotes.forEach(local => {
+      const serverQuote = formattedServerQuotes.find(sq => sq.text === local.text);
+      if (serverQuote) {
+        if (serverQuote.category !== local.category) {
+          conflicts.push({ local, server: serverQuote });
+        }
+      } else {
+        mergedQuotes.push(local);
+      }
+    });
+
+    // Handle conflicts in UI if any exist
+    if (conflicts.length > 0) {
+      showConflictResolutionUI(conflicts, mergedQuotes);
+    } else {
+      quotes = mergedQuotes;
+      saveQuotes();
+      populateCategories();
+      notifyUser("Quotes synced successfully!");
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Sync failed:', error);
+    notifyUser("Failed to sync with server");
+    return false;
+  }
+}
+
+// Set up periodic sync (every 5 minutes)
+let syncInterval;
+function startPeriodicSync() {
+  // Initial sync
+  syncQuotes();
+
+  // Set up periodic sync every 5 minutes
+  syncInterval = setInterval(syncQuotes, 5 * 60 * 1000);
+}
+
+function stopPeriodicSync() {
+  if (syncInterval) {
+    clearInterval(syncInterval);
+    syncInterval = null;
+  }
+}
+
+function showConflictResolutionUI(conflicts, mergedQuotes) {
+  const modal = document.createElement('div');
+  modal.className = 'conflict-modal';
+  modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border:1px solid #ccc;max-height:80vh;overflow-y:auto;';
+
+  modal.innerHTML = `
+    <h3>Conflicts Found</h3>
+    <div id="conflicts"></div>
+    <button id="resolveAll">Keep All Local</button>
+    <button id="resolveServer">Keep All Server</button>
+  `;
+
+  const conflictsDiv = modal.querySelector('#conflicts');
+  conflicts.forEach((conflict, i) => {
+    conflictsDiv.innerHTML += `
+      <div class="conflict" style="margin:10px 0;padding:10px;border:1px solid #eee;">
+        <p>Local: "${conflict.local.text}" (${conflict.local.category})</p>
+        <p>Server: "${conflict.server.text}" (${conflict.server.category})</p>
+        <button onclick="resolveConflict(${i}, 'local')">Keep Local</button>
+        <button onclick="resolveConflict(${i}, 'server')">Keep Server</button>
+      </div>
+    `;
+  });
+
+  document.body.appendChild(modal);
+
+  window.resolveConflict = function (index, choice) {
+    const conflict = conflicts[index];
+    const quoteToKeep = choice === 'local' ? conflict.local : conflict.server;
+
+    // Update mergedQuotes with the chosen version
+    const quoteIndex = mergedQuotes.findIndex(q => q.text === conflict.server.text);
+    if (quoteIndex !== -1) {
+      mergedQuotes[quoteIndex] = quoteToKeep;
+    } else {
+      mergedQuotes.push(quoteToKeep);
+    }
+
+    // Remove the conflict UI element
+    conflictsDiv.children[index].remove();
+
+    // If no more conflicts, update and close
+    if (conflictsDiv.children.length === 0) {
+      quotes = mergedQuotes;
+      saveQuotes();
+      populateCategories();
+      modal.remove();
+      notifyUser("All conflicts resolved!");
+    }
+  };
+
+  modal.querySelector('#resolveAll').onclick = () => {
+    conflicts.forEach((_, i) => resolveConflict(i, 'local'));
+  };
+
+  modal.querySelector('#resolveServer').onclick = () => {
+    conflicts.forEach((_, i) => resolveConflict(i, 'server'));
+  };
+}
+
 /* === INIT === */
 document.addEventListener("DOMContentLoaded", () => {
   loadQuotes();
   populateCategories();
   createAddQuoteForm();
   createImportExportUI();
+
+  // Create sync status UI
+  const syncStatus = document.createElement('div');
+  syncStatus.id = 'notification';
+  syncStatus.style.cssText = 'position:fixed;bottom:20px;right:20px;background:rgba(0,0,0,0.8);color:white;padding:10px;border-radius:5px;display:none;';
+  document.body.appendChild(syncStatus);
+
+  // Start periodic sync
+  startPeriodicSync();
 
   document.getElementById("newQuote").addEventListener("click", filterQuotes);
 
