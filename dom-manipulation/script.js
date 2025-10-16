@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
 const SERVER_URL = "https://jsonplaceholder.typicode.com/posts"; // mock endpoint
 
 // Simulate fetching from "server"
-async function fetchServerQuotes() {
+async function fetchQuotesFromServer() {
   try {
     const res = await fetch(SERVER_URL);
     const data = await res.json();
